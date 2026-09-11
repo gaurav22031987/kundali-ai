@@ -10,8 +10,12 @@ from src.services.birth_data_service import normalize_birth_data
 from src.validators import ALLOWED_GENDERS, validate_birth_details
 
 
-def render_birth_details_form(lang: str = "en") -> tuple[bool, BirthDetails | None]:
-    """Render the form and return validated details after submission."""
+def render_birth_details_form(lang: str = "en", *, compact: bool = False) -> tuple[bool, BirthDetails | None]:
+    """Render the single stateful Birth Details form.
+
+    The same widget keys are used on desktop and mobile; responsiveness is
+    handled by app-level CSS, so values are never duplicated or reset.
+    """
     defaults = {
         "birth_name": "Gaurav Gupta",
         "birth_day": 22,
@@ -24,7 +28,7 @@ def render_birth_details_form(lang: str = "en") -> tuple[bool, BirthDetails | No
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
-    with st.form("birth_details_form"):
+    with st.form("birth_details_form", border=not compact):
         name = st.text_input(t("name", lang), max_chars=80, placeholder="e.g., Aditi Sharma", key="birth_name")
         st.markdown(f"**{t('dob', lang)}**")
         day_column, month_column, year_column = st.columns(3)

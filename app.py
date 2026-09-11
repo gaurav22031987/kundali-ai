@@ -25,53 +25,222 @@ from src.services.kundali_service import generate_kundali
 LOGGER = logging.getLogger(__name__)
 ASTROJIVAN_BANNER = Path(__file__).resolve().parent / "assets" / "astrojivan_banner.png"
 def inject_styles() -> None:
+    """Apply production-style responsive layout and hide Streamlit chrome."""
     st.markdown(
-    """
-    <style>
-    /* Hide Streamlit chrome */
-    header[data-testid="stHeader"] {
-        display: none;
-    }
+        """
+        <style>
+        /* ---------------------------------
+           PRODUCTION / WHITE-LABEL CHROME
+           --------------------------------- */
+        #MainMenu,
+        footer,
+        header[data-testid="stHeader"],
+        div[data-testid="stToolbar"],
+        div[data-testid="stDecoration"],
+        div[data-testid="stStatusWidget"],
+        [data-testid="stAppDeployButton"],
+        [data-testid="stHeaderActionElements"],
+        button[data-testid="stBaseButton-header"],
+        button[data-testid="stBaseButton-headerNoPadding"],
+        .stDeployButton,
+        div[class*="viewerBadge"],
+        div[class*="ViewerBadge"],
+        a[href*="share.streamlit.io"],
+        a[href*="github.com"][target="_blank"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
 
-    #MainMenu {
-        visibility: hidden;
-    }
+        /* Remove reserved header space after hiding Streamlit header. */
+        [data-testid="stAppViewContainer"] {
+            padding-top: 0 !important;
+        }
 
-    footer {
-        visibility: hidden;
-    }
+        html, body, [class*="css"] {
+            font-family:
+                Inter,
+                "Segoe UI",
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                sans-serif !important;
+        }
 
-    div[data-testid="stStatusWidget"] {
-        display: none;
-    }
+        .block-container {
+            max-width: 1500px;
+            padding-top: 1rem !important;
+            padding-bottom: 2rem !important;
+        }
 
-    /* Better app spacing */
-    .block-container {
-        padding-top: 1rem;
-        padding-bottom: 2rem;
-        max-width: 1500px;
-    }
+        /* ---------------------------------
+           LEFT CONTROL PANEL
+           --------------------------------- */
+        div[data-testid="stForm"] {
+            border-radius: 16px !important;
+        }
 
-    /* Premium typography */
-    html, body, [class*="css"] {
-        font-family: Inter, "Segoe UI", system-ui, sans-serif;
-    }
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stSelectbox"] > div,
+        div[data-testid="stTimeInput"] input {
+            border-radius: 10px !important;
+        }
 
-    /* Buttons */
-    .stButton > button {
-        border-radius: 10px;
-        font-weight: 600;
-    }
+        .stButton > button,
+        .stFormSubmitButton > button {
+            border-radius: 11px !important;
+            font-weight: 600 !important;
+            min-height: 44px !important;
+        }
 
-    /* Input controls */
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="select"] > div {
-        border-radius: 10px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True)
+        /* ---------------------------------
+           ASTROJIVAN BRAND HEADER
+           --------------------------------- */
+        .astrojivan-header {
+            min-height: 126px;
+            display: flex;
+            align-items: stretch;
+            overflow: hidden;
+            background: linear-gradient(135deg, #2f1648, #643d7d);
+            color: #fff;
+            border-radius: 18px;
+            box-shadow: 0 10px 26px rgba(54, 25, 79, .16);
+            margin-bottom: 22px;
+        }
 
+        .astrojivan-header-image {
+            width: 156px;
+            flex: 0 0 156px;
+            border-right: 2px solid rgba(216, 169, 51, .72);
+            background: #241137;
+        }
+
+        .astrojivan-header-image img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: cover;
+            object-position: center;
+        }
+
+        .astrojivan-header-copy {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 20px 28px;
+            min-width: 0;
+        }
+
+        .astrojivan-header-copy h1 {
+            margin: 0;
+            color: #f4cf71;
+            font-size: 2rem;
+            line-height: 1.1;
+        }
+
+        .astrojivan-header-copy p {
+            margin: 8px 0 0;
+            color: rgba(255, 255, 255, .9);
+            font-size: 1rem;
+        }
+
+        /* ---------------------------------
+           MOBILE RESPONSIVE LAYOUT
+           --------------------------------- */
+        @media (max-width: 768px) {
+            html, body {
+                overflow-x: hidden !important;
+            }
+
+            .block-container {
+                max-width: 100% !important;
+                padding: .75rem .85rem 1.5rem .85rem !important;
+            }
+
+            /*
+            All Streamlit columns become vertical on mobile.
+            This makes the Birth Details panel appear above the main content
+            and also prevents tiny DOB/chart columns.
+            */
+            div[data-testid="stHorizontalBlock"] {
+                flex-direction: column !important;
+                gap: .7rem !important;
+            }
+
+            div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] {
+                width: 100% !important;
+                flex: 1 1 100% !important;
+                min-width: 100% !important;
+            }
+
+            /* Compact AstroJivan header on phone. */
+            .astrojivan-header {
+                min-height: 96px !important;
+                height: 96px !important;
+                border-radius: 14px !important;
+                margin-bottom: 14px !important;
+            }
+
+            .astrojivan-header-image {
+                width: 90px !important;
+                height: 96px !important;
+                flex: 0 0 90px !important;
+            }
+
+            .astrojivan-header-image img {
+                height: 96px !important;
+                max-height: 96px !important;
+                object-fit: cover !important;
+            }
+
+            .astrojivan-header-copy {
+                padding: 10px 12px !important;
+            }
+
+            .astrojivan-header-copy h1 {
+                font-size: 1.35rem !important;
+            }
+
+            .astrojivan-header-copy p {
+                margin-top: 4px !important;
+                font-size: .78rem !important;
+                line-height: 1.25 !important;
+            }
+
+            div[data-testid="stTextInput"] input,
+            div[data-testid="stSelectbox"] > div,
+            div[data-testid="stTimeInput"] input {
+                min-height: 44px !important;
+            }
+
+            .stFormSubmitButton > button,
+            .stButton > button {
+                width: 100% !important;
+                min-height: 46px !important;
+            }
+
+            h1 { font-size: 1.8rem !important; }
+            h2 { font-size: 1.4rem !important; }
+            h3 { font-size: 1.12rem !important; }
+
+            /* Keep tabs scrollable instead of squeezing labels. */
+            div[data-baseweb="tab-list"] {
+                overflow-x: auto !important;
+                scrollbar-width: none;
+            }
+
+            div[data-baseweb="tab-list"]::-webkit-scrollbar {
+                display: none;
+            }
+
+            div[data-baseweb="tab"] {
+                flex: 0 0 auto !important;
+                white-space: nowrap !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def render_header(lang: str) -> None:
     """Render compact AstroJivan branding, with a text-only asset fallback."""
@@ -90,25 +259,36 @@ def render_header(lang: str) -> None:
     )
 
 
-def render_sidebar() -> tuple[bool, object | None, str]:
+def _initialize_language() -> None:
     if "language" not in st.session_state:
         st.session_state.language = normalize_language(st.query_params.get("lang"))
     if "language_selector" not in st.session_state:
         st.session_state.language_selector = st.session_state.language
-    with st.sidebar:
-        current = st.session_state.language
-        selected = st.selectbox(
-            t("language", current),
-            ["hi", "en"],
-            format_func=lambda code: t("english" if code == "en" else "hindi", code),
-            key="language_selector",
-        )
-        st.session_state.language = normalize_language(selected)
-        if st.query_params.get("lang") != st.session_state.language:
-            st.query_params["lang"] = st.session_state.language
-        lang = st.session_state.language
-        st.markdown(f"### {t('birth_details', lang)}")
-        submitted, details = render_birth_details_form(lang)
+
+
+def render_language_selector() -> str:
+    current = st.session_state.language
+    selected = st.selectbox(
+        t("language", current), ["hi", "en"],
+        format_func=lambda code: t("english" if code == "en" else "hindi", code),
+        key="language_selector",
+    )
+    st.session_state.language = normalize_language(selected)
+    if st.query_params.get("lang") != st.session_state.language:
+        st.query_params["lang"] = st.session_state.language
+    return st.session_state.language
+
+
+def render_controls_panel() -> tuple[bool, object | None, str]:
+    """Render language + Birth Details in the normal page flow.
+
+    Using normal page columns instead of st.sidebar makes the same form
+    visible on mobile without duplicate Streamlit widgets or duplicate keys.
+    """
+    _initialize_language()
+    lang = render_language_selector()
+    st.markdown(f"### {t('birth_details', lang)}")
+    submitted, details = render_birth_details_form(lang, compact=True)
     return submitted, details, st.session_state.language
 
 
@@ -233,36 +413,57 @@ def render_kundali_tabs(chart, details, lang: str) -> None:
 
 def main() -> None:
     st.set_page_config(
-    page_title="AstroJivan",
-    page_icon="✨",
-    layout="wide",
-    initial_sidebar_state="expanded",
+        page_title="AstroJivan",
+        page_icon="✨",
+        layout="wide",
+        initial_sidebar_state="collapsed",
     )
     inject_styles()
-    submitted, details, lang = render_sidebar()
-    render_header(lang)
-    if submitted and details:
-        try:
-            LOGGER.info("[Language] before Kundali generation: %s", lang)
-            with st.spinner(t("resolving", lang)):
-                st.session_state.chart = generate_kundali(details)
-                st.session_state.birth_details = details
-                st.session_state.pop("ai_interpretation", None)
-                st.session_state.chat_messages = []
-                st.session_state.pop("chat_conversation_id", None)
-                st.session_state.pop("chat_conversation_selector", None)
-            LOGGER.info("[Language] after Kundali generation: %s", st.session_state.language)
-        except LocationResolutionError as error:
-            LOGGER.exception("Kundali location resolution failed")
-            st.error(t(str(error), lang))
-        except Exception:
-            LOGGER.exception("Kundali generation failed")
-            st.error(t("unable_generate", lang))
-    chart = st.session_state.get("chart")
-    details = st.session_state.get("birth_details")
-    if chart is None or details is None:
-        st.info(t("generate_new", lang)); return
-    render_kundali_tabs(chart, details, lang)
+
+    # Do not use st.sidebar for the Birth Details form.
+    # On desktop this behaves like a left control panel; on mobile CSS stacks
+    # the same panel above the AstroJivan content.
+    controls_column, content_column = st.columns(
+        [0.31, 0.69],
+        gap="large",
+    )
+
+    with controls_column:
+        with st.container(border=True):
+            submitted, details, lang = render_controls_panel()
+
+    with content_column:
+        render_header(lang)
+
+        if submitted and details:
+            try:
+                LOGGER.info("[Language] before Kundali generation: %s", lang)
+                with st.spinner(t("resolving", lang)):
+                    st.session_state.chart = generate_kundali(details)
+                    st.session_state.birth_details = details
+                    st.session_state.pop("ai_interpretation", None)
+                    st.session_state.chat_messages = []
+                    st.session_state.pop("chat_conversation_id", None)
+                    st.session_state.pop("chat_conversation_selector", None)
+                LOGGER.info(
+                    "[Language] after Kundali generation: %s",
+                    st.session_state.language,
+                )
+            except LocationResolutionError as error:
+                LOGGER.exception("Kundali location resolution failed")
+                st.error(t(str(error), lang))
+            except Exception:
+                LOGGER.exception("Kundali generation failed")
+                st.error(t("unable_generate", lang))
+
+        chart = st.session_state.get("chart")
+        saved_details = st.session_state.get("birth_details")
+
+        if chart is None or saved_details is None:
+            st.info(t("generate_new", lang))
+            return
+
+        render_kundali_tabs(chart, saved_details, lang)
 
 
 if __name__ == "__main__":
