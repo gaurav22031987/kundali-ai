@@ -1,11 +1,16 @@
 """Tests for chart-grounded AI chat context and prompt behavior."""
 
+import json
 from datetime import date, time
 
-import pytest
-
 from src.models import BirthDetails, Location
-from src.services.ai_chat_service import build_chat_context, build_chat_prompt, chat_is_available, detect_language
+from src.services.ai_chat_service import (
+    SYSTEM_PROMPT,
+    _build_messages,
+    build_chat_context,
+    chat_is_available,
+    detect_language,
+)
 from src.services.vedic_calculator import calculate_chart
 
 
@@ -15,41 +20,37 @@ def _details_and_chart():
     return details, chart
 
 
-def test_chat_context_contains_required_deterministic_sections():
+def test_chat_context_contains_deterministic_birth_and_chart_data():
     details, chart = _details_and_chart()
-    context = build_chat_context(chart, details)
+    context = json.loads(build_chat_context(chart, details))
     assert context["birth_details"]["name"] == "Aditi Sharma"
-    assert context["d1"]["lagna"]["sign"] == chart.ascendant_sign
-    assert len(context["planetary_positions"]) == 9
-    assert context["current_dasha"]["mahadasha"]["lord"] == chart.current_mahadasha.lord
+    assert context["calculated_chart"]["ascendant_sign"] == chart.ascendant_sign
 
 
-def test_hindi_and_english_chat_prompts_include_language_and_history():
+def test_fallback_openai_messages_include_history_and_language():
     details, chart = _details_and_chart()
-    context = build_chat_context(chart, details)
-    history = [{"role": "user", "content": "Earlier question"}, {"role": "assistant", "content": "Earlier answer"}]
-    english = build_chat_prompt(context, history, "Career?", "en")
-    hindi = build_chat_prompt(context, history, "करियर?", "hi")
-    assert "Respond entirely in English" in english
-    assert "Respond entirely in natural Hindi" in hindi
-    assert "Earlier question" in english
+    messages = _build_messages(
+        build_chat_context(chart, details),
+        [{"role": "assistant", "content": "Saved response"}],
+        "Follow up",
+        "hi",
+    )
+    assert "Hindi" in messages[1]["content"]
+    assert {"role": "assistant", "content": "Saved response"} in messages
 
 
-def test_missing_chart_handling_and_api_key_handling(monkeypatch):
-    assert build_chat_context(None, None) is None
-    with pytest.raises(ValueError):
-        build_chat_prompt(None, [], "Question", "en")
+def test_missing_api_key_disables_chat(monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert chat_is_available() is False
 
 
-def test_conversation_history_is_preserved_in_prompt():
-    details, chart = _details_and_chart()
-    prompt = build_chat_prompt(build_chat_context(chart, details), [{"role": "assistant", "content": "Saved response"}], "Follow up", "en")
-    assert "Saved response" in prompt
-
-
 def test_question_language_detection_prioritizes_devanagari_and_hinglish():
     assert detect_language("मेरी नौकरी कब लगेगी?", "en") == "hi"
-    assert detect_language("job kab milegi", "en") == "hi"
+    assert detect_language("job kab milegi", "en") == "hinglish"
     assert detect_language("When is my next opportunity?", "hi") == "hi"
+
+
+def test_system_prompt_requires_one_relevant_follow_up_and_prior_history():
+    assert "ask exactly ONE short follow-up" in SYSTEM_PROMPT
+    assert "Never repeat a clarification" in SYSTEM_PROMPT
+    assert "answer the original question" in SYSTEM_PROMPT

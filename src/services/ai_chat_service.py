@@ -1,108 +1,335 @@
-"""Chart-grounded OpenAI chat service; it never calculates astrology data."""
+"""Interactive AI chat service backed by deterministic Kundali context."""
+
+from __future__ import annotations
 
 import json
+import logging
 import os
-from datetime import date
+import re
+from typing import Any, Mapping, Sequence
 
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from src.models import BirthDetails, KundaliChart
-from src.services.chart_serializer import chart_to_payload
-from src.services.chat_persistence_service import configured_user_id, get_chat_store
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
-CHAT_SYSTEM_PROMPT = """You are a Vedic astrology interpretation assistant. Use only the provided calculated Kundali data.
-Do not invent or recalculate planetary positions, house placements, dashas, dates, Nakshatras, Lagna, or D1/D9/D10 placements.
-If a requested fact is not in the context, state that it is unavailable. Clearly distinguish supplied deterministic chart facts from astrology-based interpretation.
-Present future-oriented content as reflective guidance, never guaranteed future events. Do not give medical, legal, or financial advice."""
-HINGLISH_WORDS = {"hai", "mera", "meri", "kab", "kya", "kaise", "kundli", "naukri", "shaadi", "career", "job", "mujhe", "aap", "meri"}
+# Keep this configurable so local and Streamlit Cloud can use the same code.
+DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 
-def detect_language(message: str, fallback: str = "en") -> str:
-    """Detect Hindi/Devanagari or common Hinglish before falling back to UI language."""
-    if any("\u0900" <= character <= "\u097f" for character in message):
-        return "hi"
-    words = {word.strip(".,?!:;'").lower() for word in message.split()}
-    return "hi" if words & HINGLISH_WORDS else fallback
+SYSTEM_PROMPT = """
+You are an interactive Vedic astrology assistant inside a Kundali application.
+
+You receive:
+1. Deterministically calculated Kundali/chart facts.
+2. Previous conversation history from the application's canonical transcript.
+3. The user's latest message.
+
+GROUNDING
+- Use ONLY the supplied chart context for astrological facts.
+- Never invent planetary placements, houses, dashas, antardashas,
+  divisional-chart positions, yogas, dates, nakshatras, degrees, or aspects.
+- If required chart information is unavailable, say so clearly.
+- Astrology timing is interpretive, not guaranteed.
+
+INTERACTIVE BEHAVIOR
+- Read the previous conversation before answering.
+- If the user's question is broad and ONE missing real-world detail would
+  materially improve the answer, ask exactly ONE short follow-up question.
+- Do not ask a follow-up if the answer is already present in history.
+- Do not repeat a clarification already answered.
+- If the previous assistant message asked a clarification and the latest user
+  message answers it, answer the ORIGINAL user intent using that new context.
+- Do not turn the conversation into a questionnaire.
+- Once enough context exists, provide the answer instead of asking more
+  questions.
+- Direct questions that can be answered from chart context should be answered
+  directly.
+
+LANGUAGE
+- Hindi / Devanagari user -> natural Hindi.
+- Roman-script Hindi/Hinglish user -> natural Hinglish.
+- English user -> English.
+- Keep astrology terms such as Mahadasha, Antardasha, D10, Navamsa, Lagna,
+  Rahu, etc. where appropriate.
+
+STYLE
+- Start with the most useful conclusion.
+- Explain the chart facts supporting it.
+- For timing questions, describe stronger/weaker windows rather than certainty.
+- Avoid claims such as "100% job lagegi".
+"""
 
 
-def build_chat_context(chart: KundaliChart | None, details: BirthDetails | None) -> dict | None:
-    """Create the complete JSON-safe context passed to chat from existing chart results."""
-    if chart is None or details is None:
-        return None
-    payload = chart_to_payload(chart)
-    return {
-        "birth_details": {"name": details.name, "date_of_birth": details.date_of_birth.isoformat(), "time_of_birth": details.time_of_birth.isoformat(), "place_of_birth": details.place_of_birth},
-        "d1": {"lagna": payload["lagna"], "houses": payload["houses"]},
-        "d9": payload["navamsa"],
-        "d10": payload["dashamsa"],
-        "planetary_positions": payload["planets"],
-        "vimshottari_dasha": {"timeline": [{"lord": period.lord, "start": period.start.isoformat(), "end": period.end.isoformat()} for period in chart.mahadashas]},
-        "current_dasha": payload["current_dasha"],
-        "current_date": date.today().isoformat(),
-    }
-
-
-def build_chat_prompt(context: dict | None, history: list[dict[str, str]], question: str, lang: str, retrieved_memories: list[str] | None = None) -> str:
-    """Build a language-specific prompt containing only local session history and facts."""
-    if context is None:
-        raise ValueError("A generated Kundali is required before chat can answer.")
-    language_rule = "Respond entirely in natural Hindi using Devanagari script; retain only D1, D9, and D10 abbreviations in English." if lang == "hi" else "Respond entirely in English."
-    transcript = history[-12:]
-    return f"{language_rule}\nDeterministic chart context:\n{json.dumps(context, ensure_ascii=False, sort_keys=True)}\nRelevant older conversations for this same user:\n{json.dumps(retrieved_memories or [], ensure_ascii=False)}\nConversation history:\n{json.dumps(transcript, ensure_ascii=False)}\nUser question:\n{question}"
+_DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
+_HINGLISH_MARKERS = {
+    "kya", "kab", "kaise", "mera", "meri", "mere", "mujhe", "hai", "hain",
+    "hoga", "hogi", "lagegi", "milega", "job", "naukri", "shaadi", "paisa",
+    "career", "batao", "bata", "raha", "rahi", "abhi", "tak", "chance",
+    "chances", "kyun", "nahi", "haan", "ha", "interview", "offer",
+}
 
 
 def chat_is_available() -> bool:
-    return bool(os.getenv("OPENAI_API_KEY"))
+    """Return True when OpenAI chat can be used."""
+    return bool(os.getenv("OPENAI_API_KEY", "").strip())
 
 
-def _embed(client: OpenAI, text: str) -> list[float]:
-    return client.embeddings.create(model=os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small"), input=text).data[0].embedding
+def _get_openai_client() -> OpenAI:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not configured.")
+    return OpenAI(api_key=api_key)
 
 
-def _invoke_with_langgraph(database_url: str, thread_id: str, prompt: str, client: OpenAI) -> str:
-    """Run an OpenAI answer node with PostgreSQL-backed LangGraph checkpoints."""
-    from langchain_core.messages import AIMessage, HumanMessage
+def detect_language(text: str, fallback: str = "en") -> str:
+    """Return 'hi', 'hinglish', or 'en'."""
+    text = (text or "").strip()
+
+    if not text:
+        return "hi" if fallback == "hi" else "en"
+
+    if _DEVANAGARI_RE.search(text):
+        return "hi"
+
+    words = set(re.findall(r"[A-Za-z]+", text.lower()))
+    if words.intersection(_HINGLISH_MARKERS):
+        return "hinglish"
+
+    return "hi" if fallback == "hi" else "en"
+
+
+def _to_serializable(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+
+    if isinstance(value, Mapping):
+        return {
+            str(key): _to_serializable(item)
+            for key, item in value.items()
+        }
+
+    if isinstance(value, (list, tuple, set)):
+        return [_to_serializable(item) for item in value]
+
+    if hasattr(value, "model_dump"):
+        try:
+            return _to_serializable(value.model_dump())
+        except Exception:
+            logger.debug("model_dump failed", exc_info=True)
+
+    if hasattr(value, "__dict__"):
+        try:
+            return {
+                key: _to_serializable(item)
+                for key, item in vars(value).items()
+                if not key.startswith("_")
+            }
+        except Exception:
+            logger.debug("__dict__ serialization failed", exc_info=True)
+
+    return str(value)
+
+
+def build_chat_context(chart: Any, details: Any) -> str:
+    """Serialize already-calculated Kundali facts for grounded AI use."""
+    payload = {
+        "birth_details": _to_serializable(details),
+        "calculated_chart": _to_serializable(chart),
+    }
+
+    return json.dumps(
+        payload,
+        ensure_ascii=False,
+        indent=2,
+        default=str,
+    )
+
+
+def _normalize_history(
+    history: Sequence[Mapping[str, Any]] | None,
+) -> list[dict[str, str]]:
+    normalized: list[dict[str, str]] = []
+
+    for item in history or []:
+        role = str(item.get("role", "")).strip().lower()
+        content = str(item.get("content", "")).strip()
+
+        if role not in {"user", "assistant"} or not content:
+            continue
+
+        normalized.append({"role": role, "content": content})
+
+    return normalized
+
+
+def _language_instruction(language: str) -> str:
+    if language == "hi":
+        return "Respond naturally in Hindi using Devanagari."
+    if language == "hinglish":
+        return "Respond naturally in conversational Hinglish."
+    return "Respond in English."
+
+
+def _build_messages(
+    context: str,
+    history: Sequence[Mapping[str, Any]] | None,
+    question: str,
+    language: str,
+) -> list[dict[str, str]]:
+    """Build the canonical model input from chart + UI transcript."""
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": _language_instruction(language)},
+        {
+            "role": "system",
+            "content": (
+                "CHART CONTEXT\n"
+                "This is deterministic application output and is the source of "
+                "truth for all astrological facts:\n\n"
+                f"{context}"
+            ),
+        },
+    ]
+
+    messages.extend(_normalize_history(history))
+    messages.append({"role": "user", "content": question})
+    return messages
+
+
+def _invoke_openai(
+    client: OpenAI,
+    messages: list[dict[str, str]],
+) -> str:
+    """Call OpenAI and return assistant text."""
+    response = client.chat.completions.create(
+        model=DEFAULT_MODEL,
+        messages=messages,
+        temperature=0.4,
+    )
+
+    if not response.choices:
+        raise RuntimeError("OpenAI returned no choices.")
+
+    content = response.choices[0].message.content
+    if not content:
+        raise RuntimeError("OpenAI returned an empty response.")
+
+    return content.strip()
+
+
+def _invoke_with_langgraph(
+    *,
+    database_url: str,
+    thread_id: str,
+    question: str,
+    model_messages: list[dict[str, str]],
+    client: OpenAI,
+) -> str:
+    """Run one turn through LangGraph without duplicating chat transcript.
+
+    The graph receives only the latest user question as graph input.
+    Full conversational context comes from the canonical UI transcript and is
+    supplied to the model through this request's closure.
+
+    The PostgreSQL checkpointer therefore stores agent execution state, not a
+    second copy of the full UI conversation.
+    """
+    from typing_extensions import TypedDict
     from langgraph.checkpoint.postgres import PostgresSaver
-    from langgraph.graph import START, MessagesState, StateGraph
+    from langgraph.graph import END, START, StateGraph
 
-    def answer_node(_: MessagesState) -> dict:
-        response = client.responses.create(model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"), instructions=CHAT_SYSTEM_PROMPT, input=prompt, store=False)
-        return {"messages": [AIMessage(response.output_text)]}
+    class ExecutionState(TypedDict, total=False):
+        question: str
+        answer: str
 
-    builder = StateGraph(MessagesState)
-    builder.add_node("answer", answer_node)
-    builder.add_edge(START, "answer")
+    def assistant_node(state: ExecutionState) -> ExecutionState:
+        # state["question"] is the latest graph input. model_messages already
+        # contains the canonical history + the same latest question.
+        answer = _invoke_openai(client, model_messages)
+        return {"answer": answer}
+
+    builder = StateGraph(ExecutionState)
+    builder.add_node("assistant", assistant_node)
+    builder.add_edge(START, "assistant")
+    builder.add_edge("assistant", END)
+
+    config = {
+        "configurable": {
+            "thread_id": str(thread_id),
+            # A namespace prevents old checkpoint formats from interfering
+            # with this execution-state-only graph design.
+            "checkpoint_ns": "kundali-agent-v2",
+        }
+    }
+
     with PostgresSaver.from_conn_string(database_url) as checkpointer:
+        # setup() is idempotent and creates LangGraph checkpoint tables.
         checkpointer.setup()
         graph = builder.compile(checkpointer=checkpointer)
-        result = graph.invoke({"messages": [HumanMessage(prompt)]}, {"configurable": {"thread_id": thread_id}})
-    return result["messages"][-1].content
+
+        result = graph.invoke(
+            {"question": question},
+            config=config,
+        )
+
+    answer = str(result.get("answer", "")).strip()
+    if not answer:
+        raise RuntimeError("LangGraph returned an empty assistant response.")
+
+    return answer
 
 
-def ask_chart_question(context: dict | None, history: list[dict[str, str]], question: str, lang: str, user_id: str | None = None, thread_id: str | None = None) -> str | None:
-    """Return an answer from OpenAI, or None if no API key is configured."""
-    if not chat_is_available():
+def ask_chart_question(
+    context: str,
+    history: Sequence[Mapping[str, Any]] | None,
+    question: str,
+    language: str,
+    *,
+    user_id: str | None = None,
+    thread_id: str | None = None,
+) -> str | None:
+    """Answer one interactive Kundali question.
+
+    Canonical conversation history comes from the UI/chat_messages table.
+    LangGraph checkpointing is optional and never acts as a second transcript.
+    """
+    del user_id  # Reserved for future user-scoped agent configuration.
+
+    question = (question or "").strip()
+    if not question or not chat_is_available():
         return None
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    response_lang = detect_language(question, lang)
-    store = get_chat_store()
-    active_user = user_id or configured_user_id()
-    retrieved: list[str] = []
-    question_embedding: list[float] | None = None
-    if store and thread_id:
-        store.setup()
-        question_embedding = _embed(client, question)
-        retrieved = store.retrieve_memories(active_user, question_embedding, thread_id)
-    prompt = build_chat_prompt(context, history, question, response_lang, retrieved)
-    if store and thread_id:
-        answer = _invoke_with_langgraph(store.database_url, thread_id, prompt, client)
-        store.save_message(active_user, thread_id, "user", question, question_embedding)
-        answer_embedding = _embed(client, answer)
-        store.save_message(active_user, thread_id, "assistant", answer, answer_embedding)
-        store.save_memory(active_user, thread_id, f"User: {question}\nAssistant: {answer}", _embed(client, f"User: {question}\nAssistant: {answer}"))
-        return answer
-    response = client.responses.create(model=os.getenv("OPENAI_MODEL", "gpt-4.1-mini"), instructions=CHAT_SYSTEM_PROMPT, input=prompt, store=False)
-    return response.output_text
+
+    client = _get_openai_client()
+
+    model_messages = _build_messages(
+        context=context,
+        history=history,
+        question=question,
+        language=language,
+    )
+
+    database_url = os.getenv("DATABASE_URL", "").strip()
+
+    if database_url and thread_id:
+        try:
+            return _invoke_with_langgraph(
+                database_url=database_url,
+                thread_id=str(thread_id),
+                question=question,
+                model_messages=model_messages,
+                client=client,
+            )
+        except Exception:
+            # Persistent agent execution state should never make chat unusable.
+            logger.exception(
+                "LangGraph/PostgreSQL execution failed; falling back to "
+                "direct OpenAI invocation."
+            )
+
+    return _invoke_openai(
+        client=client,
+        messages=model_messages,
+    )
