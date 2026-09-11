@@ -323,9 +323,11 @@ def render_controls_panel() -> tuple[bool, object | None, str]:
     _initialize_language()
     lang = render_language_selector()
 
+    st.session_state.setdefault("birth_details_expanded", True)
+
     with st.expander(
         f"🧾 {t('birth_details', lang)}",
-        expanded=True,
+        expanded=st.session_state.birth_details_expanded,
     ):
         submitted, details = render_birth_details_form(
             lang,
@@ -488,10 +490,16 @@ def main() -> None:
                     st.session_state.chat_messages = []
                     st.session_state.pop("chat_conversation_id", None)
                     st.session_state.pop("chat_conversation_selector", None)
+
+                    # On successful generation, collapse Birth Details so the
+                    # user immediately sees the Kundali content on mobile.
+                    st.session_state.birth_details_expanded = False
+
                 LOGGER.info(
                     "[Language] after Kundali generation: %s",
                     st.session_state.language,
                 )
+                st.rerun()
             except LocationResolutionError as error:
                 LOGGER.exception("Kundali location resolution failed")
                 st.error(t(str(error), lang))
