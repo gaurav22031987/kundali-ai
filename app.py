@@ -322,18 +322,8 @@ def render_controls_panel() -> tuple[bool, object | None, str]:
     """
     _initialize_language()
     lang = render_language_selector()
-
-    st.session_state.setdefault("birth_details_expanded", True)
-
-    with st.expander(
-        f"🧾 {t('birth_details', lang)}",
-        expanded=st.session_state.birth_details_expanded,
-    ):
-        submitted, details = render_birth_details_form(
-            lang,
-            compact=True,
-        )
-
+    st.markdown(f"### {t('birth_details', lang)}")
+    submitted, details = render_birth_details_form(lang, compact=True)
     return submitted, details, st.session_state.language
 
 
