@@ -144,6 +144,27 @@ def inject_styles() -> None:
         }
 
         /* ---------------------------------
+           BIRTH DETAILS TOGGLE
+           --------------------------------- */
+        div[data-testid="stExpander"] {
+            border: 1px solid rgba(100, 61, 125, .18) !important;
+            border-radius: 14px !important;
+            overflow: hidden !important;
+            background: rgba(100, 61, 125, .025) !important;
+        }
+
+        div[data-testid="stExpander"] details > summary {
+            font-weight: 700 !important;
+            font-size: 1rem !important;
+            min-height: 48px !important;
+            padding: 0 .2rem !important;
+        }
+
+        div[data-testid="stExpander"] details > summary:hover {
+            color: #643d7d !important;
+        }
+
+        /* ---------------------------------
            MOBILE RESPONSIVE LAYOUT
            --------------------------------- */
         @media (max-width: 768px) {
@@ -154,6 +175,19 @@ def inject_styles() -> None:
             .block-container {
                 max-width: 100% !important;
                 padding: .75rem .85rem 1.5rem .85rem !important;
+            }
+
+            /* Birth Details behaves like a compact mobile drawer/toggle. */
+            div[data-testid="stExpander"] {
+                border-radius: 12px !important;
+                margin-bottom: .45rem !important;
+            }
+
+            div[data-testid="stExpander"] details > summary {
+                min-height: 52px !important;
+                font-size: 1.02rem !important;
+                padding-left: .15rem !important;
+                padding-right: .15rem !important;
             }
 
             /*
@@ -280,15 +314,24 @@ def render_language_selector() -> str:
 
 
 def render_controls_panel() -> tuple[bool, object | None, str]:
-    """Render language + Birth Details in the normal page flow.
+    """Render language plus a collapsible Birth Details panel.
 
-    Using normal page columns instead of st.sidebar makes the same form
-    visible on mobile without duplicate Streamlit widgets or duplicate keys.
+    The native Streamlit expander works on desktop and mobile and avoids
+    duplicate widget keys. On mobile the user can collapse the form after
+    entering details, leaving more room for the Kundali content.
     """
     _initialize_language()
     lang = render_language_selector()
-    st.markdown(f"### {t('birth_details', lang)}")
-    submitted, details = render_birth_details_form(lang, compact=True)
+
+    with st.expander(
+        f"🧾 {t('birth_details', lang)}",
+        expanded=True,
+    ):
+        submitted, details = render_birth_details_form(
+            lang,
+            compact=True,
+        )
+
     return submitted, details, st.session_state.language
 
 
