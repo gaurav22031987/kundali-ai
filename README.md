@@ -52,6 +52,10 @@ streamlit run app.py
 
 Open the local URL printed by Streamlit. Enter a specific place, for example `Jaipur, Rajasthan, India`. Place lookup requires an internet connection.
 
+### Streamlit Cloud geocoding
+
+Birthplace lookup uses OpenStreetMap Nominatim through `geopy`, then resolves an IANA timezone with `timezonefinder`. In Streamlit Community Cloud, configure `GEOCODER_USER_AGENT` in **Secrets** with an identifiable application name and contact URL/email, and optionally `GEOCODER_TIMEOUT`. Provider failures are logged with the original exception traceback in Cloud logs. Delhi remains a built-in fallback, alongside several common Indian cities, if Nominatim is temporarily unavailable.
+
 ## Optional AI interpretation
 
 Copy `.env.example` to `.env`, then set `OPENAI_API_KEY` to use the AI Interpretation tab. The application uses the official OpenAI Python SDK and sends a structured copy of the calculated chart. If no key is configured, the tab stays available and shows a setup message.
