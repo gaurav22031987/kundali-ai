@@ -21,7 +21,7 @@ def test_house_chart_mapping_places_each_planet_in_its_calculated_house():
     cells = house_chart_data(chart)
     assert cells[1]["lagna"] is True
     for planet in chart.planets:
-        assert PLANET_ABBREVIATIONS[planet.name] in cells[planet.house]["planets"]
+        assert any(label.startswith(PLANET_ABBREVIATIONS[planet.name]) for label in cells[planet.house]["planets"])
     assert all(cells[house.number]["sign"] == house.sign for house in chart.houses)
 
 

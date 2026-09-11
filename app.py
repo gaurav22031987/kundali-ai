@@ -1,8 +1,9 @@
 """Responsive Streamlit presentation layer for deterministic Kundali calculations."""
 
 from html import escape
-
+import base64
 import logging
+from pathlib import Path
 
 import streamlit as st
 
@@ -22,8 +23,7 @@ from src.services.interpretation_service import build_life_area_interpretations
 from src.services.kundali_service import generate_kundali
 
 LOGGER = logging.getLogger(__name__)
-
-
+ASTROJIVAN_BANNER = Path(__file__).resolve().parent / "assets" / "astrojivan_banner.png"
 def inject_styles() -> None:
     st.markdown("""<style>
     .stApp { background: #f7f8fc; }
@@ -31,21 +31,37 @@ def inject_styles() -> None:
     .block-container { padding-top: 1.3rem; padding-bottom: 2.5rem; }
     [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid #e9eaf2; }
     [data-testid="stSidebar"] .block-container { padding-top: 1rem; }
-    .hero { background: linear-gradient(135deg,#3d2157,#734a92); color:#fff; border-radius:20px; padding:24px 30px; box-shadow:0 10px 26px rgba(54,25,79,.16); margin-bottom:22px; }
-    .hero h1 { margin:0; font-size:2rem; }.hero p { margin:7px 0 0; opacity:.9; }
+    .astrojivan-header { min-height:126px; display:flex; align-items:stretch; overflow:hidden; background:linear-gradient(135deg,#2f1648,#643d7d); color:#fff; border-radius:18px; box-shadow:0 10px 26px rgba(54,25,79,.16); margin-bottom:22px; }
+    .astrojivan-header-image { width:156px; flex:0 0 156px; border-right:2px solid rgba(216,169,51,.72); background:#241137; }
+    .astrojivan-header-image img { width:100%; height:100%; display:block; object-fit:cover; object-position:center; }
+    .astrojivan-header-copy { display:flex; flex-direction:column; justify-content:center; padding:20px 28px; min-width:0; }
+    .astrojivan-header-copy h1 { margin:0; color:#f4cf71; font-size:2rem; line-height:1.1; letter-spacing:.01em; }.astrojivan-header-copy p { margin:8px 0 0; color:rgba(255,255,255,.9); font-size:1rem; }
     .summary-card { background:#fff; border:1px solid #ececf3; border-radius:16px; padding:18px; box-shadow:0 4px 14px rgba(31,35,51,.06); height:100%; box-sizing:border-box; }
     .summary-card .label { color:#6b7280; font-size:.78rem; margin-bottom:5px; }.summary-card .value { color:#1f2937; font-weight:700; font-size:1rem; overflow-wrap:anywhere; }
     div[data-testid="stTabs"] [role="tablist"] { overflow-x:auto; flex-wrap:nowrap; scrollbar-width:thin; } div[data-testid="stTabs"] button { font-weight:600; white-space:nowrap; } div[data-testid="stTabs"] button[aria-selected="true"] { color:#8a5900; border-color:#d6a11c; }.stButton > button { border-radius:10px; font-weight:700; min-height:44px; }
     [data-testid="stSidebar"] .stButton > button { background:#5d337a; color:#fff; border:0; }
     [data-testid="stSidebar"] .stButton > button:hover { background:#44245c; color:#fff; }
     [data-testid="stDataFrame"] { border:1px solid #e7e8ef; border-radius:12px; overflow:hidden; }
-    @media (max-width:900px) { .block-container { padding-left:1rem; padding-right:1rem; }.hero { padding:20px; }.hero h1 { font-size:1.7rem; } }
-    @media (max-width:600px) { .block-container { padding-top:.75rem; padding-left:.7rem; padding-right:.7rem; }.hero { border-radius:14px; padding:17px; }.hero h1 { font-size:1.4rem; }.hero p { font-size:.9rem; }.summary-card { padding:13px; margin-bottom:8px; } }
+    @media (max-width:900px) { .block-container { padding-left:1rem; padding-right:1rem; }.astrojivan-header-copy h1 { font-size:1.7rem; } }
+    @media (max-width:600px) { .block-container { padding-top:.75rem; padding-left:.7rem; padding-right:.7rem; }.astrojivan-header { min-height:0; flex-direction:column; border-radius:14px; }.astrojivan-header-image { width:100%; height:105px; flex-basis:105px; border-right:0; border-bottom:2px solid rgba(216,169,51,.72); }.astrojivan-header-copy { padding:16px 18px; text-align:center; }.astrojivan-header-copy h1 { font-size:1.5rem; }.astrojivan-header-copy p { font-size:.9rem; }.summary-card { padding:13px; margin-bottom:8px; } }
     </style>""", unsafe_allow_html=True)
 
 
 def render_header(lang: str) -> None:
-    st.markdown(f'<section class="hero"><h1>✦ {escape(t("app_title", lang))}</h1><p>{escape(t("app_subtitle", lang))}</p></section>', unsafe_allow_html=True)
+    """Render compact AstroJivan branding, with a text-only asset fallback."""
+    image_markup = ""
+    try:
+        if ASTROJIVAN_BANNER.is_file():
+            encoded_image = base64.b64encode(ASTROJIVAN_BANNER.read_bytes()).decode("ascii")
+            image_markup = f'<div class="astrojivan-header-image"><img src="data:image/png;base64,{encoded_image}" alt="AstroJivan" /></div>'
+        else:
+            LOGGER.warning("AstroJivan banner is not available at %s", ASTROJIVAN_BANNER)
+    except OSError:
+        LOGGER.exception("Could not read AstroJivan banner; using text-only header")
+    st.markdown(
+        f'<section class="astrojivan-header">{image_markup}<div class="astrojivan-header-copy"><h1>AstroJivan</h1><p>Vedic Astrology • Kundali • AI Guidance</p></div></section>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_sidebar() -> tuple[bool, object | None, str]:
@@ -89,12 +105,40 @@ def render_birth_summary(chart, details, lang: str) -> None:
 
 
 def render_planet_table(chart, lang: str, compact: bool = False) -> None:
-    rows = [{t("planet", lang): planet_name(p.name, lang), t("sign", lang): sign_name(p.sign, lang), t("house", lang): p.house, t("degree", lang): f"{p.degree_in_sign:.2f}", t("nakshatra", lang): nakshatra_name(p.nakshatra, lang)} for p in chart.planets]
-    if not compact:
-        for row, planet in zip(rows, chart.planets):
-            row[t("longitude", lang)] = f"{planet.longitude:.2f}"
-            row[t("pada", lang)] = planet.pada
+    rows = _d1_position_rows(chart, lang)
     st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _d1_position_rows(chart, lang: str) -> list[dict[str, object]]:
+    """Presentation rows sourced exclusively from deterministic D1 fields."""
+    columns = {
+        "planet": t("planet", lang), "sign": t("sign", lang),
+        "degree": t("degree", lang), "house": t("house", lang),
+        "nakshatra": t("nakshatra", lang), "pada": t("pada", lang),
+        "status": t("retrograde_direct", lang), "longitude": t("longitude", lang),
+    }
+    rows = [{
+        columns["planet"]: t("lagna", lang),
+        columns["sign"]: sign_name(chart.ascendant_sign, lang),
+        columns["degree"]: chart.ascendant_degree_dms,
+        columns["house"]: 1,
+        columns["nakshatra"]: nakshatra_name(chart.ascendant_nakshatra, lang),
+        columns["pada"]: chart.ascendant_pada,
+        columns["status"]: "-",
+        columns["longitude"]: f"{chart.ascendant_longitude:.6f}°",
+    }]
+    for planet in chart.planets:
+        rows.append({
+            columns["planet"]: planet_name(planet.name, lang),
+            columns["sign"]: sign_name(planet.sign, lang),
+            columns["degree"]: planet.degree_dms,
+            columns["house"]: planet.house,
+            columns["nakshatra"]: nakshatra_name(planet.nakshatra, lang),
+            columns["pada"]: planet.pada,
+            columns["status"]: t("retrograde" if planet.is_retrograde else "direct", lang),
+            columns["longitude"]: f"{planet.longitude:.6f}°",
+        })
+    return rows
 
 
 def render_lagna_chart(chart, lang: str) -> None:
@@ -104,12 +148,8 @@ def render_lagna_chart(chart, lang: str) -> None:
         layout = st.radio(t("charts", lang), ["north", "south"], index=0, horizontal=True, format_func=lambda value: t("north_indian" if value == "north" else "south_indian", lang), key="chart_layout")
         if layout == "north": render_north_indian_chart(chart, lang)
         else: render_south_indian_chart(chart, lang)
-    st.subheader(t("planet_details", lang))
-    sign_tab, nakshatra_tab = st.tabs([t("sign_details", lang), t("nakshatra_details", lang)])
-    with sign_tab:
-        st.dataframe([{t("planet", lang): planet_name(p.name, lang), t("sign", lang): sign_name(p.sign, lang), t("degree", lang): f"{p.degree_in_sign:.2f}", t("house", lang): p.house, t("retrograde", lang): t("no", lang)} for p in chart.planets], use_container_width=True, hide_index=True)
-    with nakshatra_tab:
-        st.dataframe([{t("planet", lang): planet_name(p.name, lang), t("nakshatra", lang): nakshatra_name(p.nakshatra, lang), t("pada", lang): p.pada, t("house", lang): p.house} for p in chart.planets], use_container_width=True, hide_index=True)
+    st.subheader(t("planetary_positions", lang))
+    st.dataframe(_d1_position_rows(chart, lang), use_container_width=True, hide_index=True)
 
 
 def render_dasha(chart, lang: str) -> None:

@@ -31,6 +31,14 @@ def nakshatra_for(longitude: float) -> tuple[str, int]:
     return NAKSHATRAS[index], min(4, int(offset / (NAKSHATRA_SPAN / 4)) + 1)
 
 
+def format_dms(degrees: float) -> str:
+    """Format an already calculated longitude/degree for display."""
+    total_seconds = min(int(round(degrees * 3600)), 359 * 3600 + 59 * 60 + 59)
+    whole_degrees, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f'{whole_degrees:02d}° {minutes:02d}\' {seconds:02d}"'
+
+
 def _julian_day(details: BirthDetails, location: Location) -> tuple[float, datetime]:
     local_time = datetime.combine(details.date_of_birth, details.time_of_birth, tzinfo=ZoneInfo(location.timezone_name))
     utc_time = local_time.astimezone(UTC)
@@ -38,8 +46,10 @@ def _julian_day(details: BirthDetails, location: Location) -> tuple[float, datet
     return swe.julday(utc_time.year, utc_time.month, utc_time.day, hour), utc_time
 
 
-def _planet_longitude(julian_day: float, planet_id: int) -> float:
-    return _normalize(swe.calc_ut(julian_day, planet_id, swe.FLG_SIDEREAL | swe.FLG_SWIEPH)[0][0])
+def _planet_coordinates(julian_day: float, planet_id: int) -> tuple[float, float]:
+    """Return deterministic sidereal longitude and its daily motion."""
+    coordinates = swe.calc_ut(julian_day, planet_id, swe.FLG_SIDEREAL | swe.FLG_SWIEPH)[0]
+    return _normalize(coordinates[0]), coordinates[3]
 
 
 def _antardasha_timeline(lord: str, start: datetime) -> tuple[DashaPeriod, ...]:
@@ -92,18 +102,40 @@ def calculate_chart(details: BirthDetails, location: Location, at: datetime | No
     _, ascmc = swe.houses_ex(julian_day, location.latitude, location.longitude, b"W", swe.FLG_SIDEREAL)
     ascendant = _normalize(ascmc[0])
     asc_sign_index = int(ascendant // 30)
-    raw = {name: _planet_longitude(julian_day, planet_id) for name, planet_id in PLANET_IDS}
+    coordinates = {name: _planet_coordinates(julian_day, planet_id) for name, planet_id in PLANET_IDS}
+    raw = {name: longitude for name, (longitude, _) in coordinates.items()}
+    motion = {name: speed for name, (_, speed) in coordinates.items()}
     raw["Ketu"] = _normalize(raw["Rahu"] + 180)
+    motion["Ketu"] = motion["Rahu"]
     positions = []
     for name in ("Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"):
         longitude = raw[name]
         nakshatra, pada = nakshatra_for(longitude)
         sign_index = int(longitude // 30)
-        positions.append(PlanetPosition(name, longitude, sign_for(longitude), longitude % 30, ((sign_index - asc_sign_index) % 12) + 1, nakshatra, pada))
+        degree_in_sign = longitude % 30
+        positions.append(PlanetPosition(
+            name=name, longitude=longitude, sign=sign_for(longitude),
+            degree_in_sign=degree_in_sign,
+            house=((sign_index - asc_sign_index) % 12) + 1,
+            nakshatra=nakshatra, pada=pada,
+            longitude_dms=format_dms(longitude),
+            degree_dms=format_dms(degree_in_sign),
+            is_retrograde=motion[name] < 0,
+        ))
     houses = tuple(House(i + 1, SIGNS[(asc_sign_index + i) % 12], _normalize((asc_sign_index + i) * 30)) for i in range(12))
     moment = (at or datetime.now(UTC)).astimezone(UTC)
     mahadashas = vimshottari_mahadasha_timeline(raw["Moon"], birth_utc)
     mahadasha = _period_at(mahadashas, moment)
     antardasha = _period_at(mahadasha.antardashas, moment)
     by_name = {planet.name: planet for planet in positions}
-    return KundaliChart(birth_utc, location, ascendant, sign_for(ascendant), by_name["Moon"].sign, by_name["Sun"].sign, tuple(positions), houses, mahadashas, mahadasha, antardasha)
+    ascendant_nakshatra, ascendant_pada = nakshatra_for(ascendant)
+    ascendant_degree = ascendant % 30
+    return KundaliChart(
+        birth_utc, location, ascendant, sign_for(ascendant),
+        by_name["Moon"].sign, by_name["Sun"].sign, tuple(positions),
+        houses, mahadashas, mahadasha, antardasha,
+        ascendant_degree_in_sign=ascendant_degree,
+        ascendant_degree_dms=format_dms(ascendant_degree),
+        ascendant_nakshatra=ascendant_nakshatra,
+        ascendant_pada=ascendant_pada,
+    )

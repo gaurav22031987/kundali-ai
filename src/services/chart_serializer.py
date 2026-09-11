@@ -14,11 +14,23 @@ def chart_to_payload(chart: KundaliChart) -> dict:
             "longitude": chart.location.longitude,
             "timezone": chart.location.timezone_name,
         },
-        "lagna": {"sign": chart.ascendant_sign, "longitude": chart.ascendant_longitude},
+        "lagna": {
+            "sign": chart.ascendant_sign,
+            "longitude": chart.ascendant_longitude,
+            "degree": chart.ascendant_degree_dms,
+            "nakshatra": chart.ascendant_nakshatra,
+            "pada": chart.ascendant_pada,
+        },
         "sun_sign": chart.sun_sign,
         "moon_sign": chart.moon_sign,
         "planets": [
-            {"name": p.name, "longitude": p.longitude, "sign": p.sign, "house": p.house, "nakshatra": p.nakshatra, "pada": p.pada}
+            {
+                "name": p.name, "longitude": p.longitude,
+                "longitude_dms": p.longitude_dms, "sign": p.sign,
+                "degree": p.degree_dms, "house": p.house,
+                "nakshatra": p.nakshatra, "pada": p.pada,
+                "is_retrograde": p.is_retrograde,
+            }
             for p in chart.planets
         ],
         "houses": [{"number": h.number, "sign": h.sign} for h in chart.houses],

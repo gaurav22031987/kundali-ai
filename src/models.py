@@ -30,6 +30,9 @@ class PlanetPosition:
     house: int
     nakshatra: str
     pada: int
+    longitude_dms: str = ""
+    degree_dms: str = ""
+    is_retrograde: bool = False
 
 
 @dataclass(frozen=True)
@@ -98,3 +101,7 @@ class KundaliChart:
     current_antardasha: DashaPeriod
     navamsa: NavamsaChart | None = None
     dashamsa: DashamsaChart | None = None
+    ascendant_degree_in_sign: float = 0.0
+    ascendant_degree_dms: str = ""
+    ascendant_nakshatra: str = ""
+    ascendant_pada: int = 0

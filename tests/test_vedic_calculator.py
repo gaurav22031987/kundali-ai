@@ -6,6 +6,7 @@ from src.models import BirthDetails, Location
 from src.services.vedic_calculator import (
     DASHA_YEARS,
     calculate_chart,
+    format_dms,
     nakshatra_for,
     sign_for,
     vimshottari_mahadasha_timeline,
@@ -17,6 +18,7 @@ def test_sign_and_nakshatra_boundaries():
     assert sign_for(359.9) == "Pisces"
     assert nakshatra_for(0) == ("Ashwini", 1)
     assert nakshatra_for(359.99)[0] == "Revati"
+    assert format_dms(12 + 34 / 60 + 56 / 3600) == '12° 34\' 56"'
 
 
 def test_chart_has_planets_houses_and_dashas():
@@ -27,6 +29,11 @@ def test_chart_has_planets_houses_and_dashas():
     assert {planet.name for planet in chart.planets} == {"Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"}
     assert len(chart.houses) == 12
     assert 0 <= chart.ascendant_longitude < 360
+    assert chart.ascendant_degree_dms.endswith('"')
+    assert chart.ascendant_nakshatra
+    assert chart.ascendant_pada in {1, 2, 3, 4}
+    assert all(planet.degree_dms.endswith('"') for planet in chart.planets)
+    assert all(isinstance(planet.is_retrograde, bool) for planet in chart.planets)
     assert chart.current_mahadasha.start < chart.current_mahadasha.end
     assert chart.current_antardasha.start < chart.current_antardasha.end
 

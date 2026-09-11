@@ -1,13 +1,13 @@
-"""Multi-user interactive Kundali chat UI with typing indicators.
+"""Beautiful multi-user interactive Kundali chat UI.
 
 Features:
-- Suggested questions removed.
-- Multi-user selection and per-user conversation history.
-- Add user, new chat, clear chat, delete conversation.
+- Cleaner modern UI with improved spacing, rounded controls, and better typography.
+- Question input and send button are on the same row.
 - Real per-keystroke draft updates using streamlit-keyup.
 - "You are typing..." indicator while the user types.
 - "AI is typing..." animated indicator while waiting for the model.
-- Typewriter-style rendering for the assistant response.
+- Typewriter-style rendering for assistant responses.
+- Multi-user selection and per-user conversations.
 """
 
 from __future__ import annotations
@@ -47,6 +47,33 @@ def _inject_chat_css() -> None:
     st.markdown(
         """
         <style>
+        /* Typography */
+        html, body, [class*="css"] {
+            font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        h1, h2, h3 {
+            letter-spacing: -0.02em;
+        }
+
+        /* Main chat card feel */
+        .kundali-section-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 8px 0 10px 0;
+        }
+
+        .kundali-section-subtle {
+            color: rgba(128,128,128,0.85);
+            font-size: 0.9rem;
+            margin-top: -4px;
+            margin-bottom: 10px;
+        }
+
+        /* Typing indicators */
         .kundali-typing {
             display: inline-flex;
             align-items: center;
@@ -93,10 +120,41 @@ def _inject_chat_css() -> None:
         }
 
         .kundali-user-typing {
-            font-size: 0.85rem;
-            opacity: 0.75;
-            margin-top: -6px;
-            margin-bottom: 6px;
+            font-size: 0.82rem;
+            opacity: 0.72;
+            margin-top: 4px;
+            margin-left: 4px;
+        }
+
+        /* Inputs */
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stSelectbox"] > div > div,
+        div[data-baseweb="input"] > div {
+            border-radius: 14px !important;
+        }
+
+        /* Buttons */
+        .stButton > button {
+            border-radius: 12px !important;
+            min-height: 42px;
+            font-weight: 600;
+        }
+
+        /* User / conversation toolbars */
+        .kundali-toolbar {
+            padding: 8px 0 2px 0;
+        }
+
+        /* Chat messages */
+        div[data-testid="stChatMessage"] {
+            border-radius: 16px;
+            padding-top: 0.2rem;
+            padding-bottom: 0.2rem;
+        }
+
+        /* Reduce vertical gap around custom keyup input */
+        iframe[title="streamlit_keyup.st_keyup"] {
+            margin-bottom: -6px;
         }
         </style>
         """,
@@ -111,7 +169,7 @@ def _inject_chat_css() -> None:
 def _welcome_message(lang: str, user_name: str) -> str:
     if lang == "hi":
         return (
-            f"नमस्ते {user_name}! 👋\n\n"
+            f"नमस्ते **{user_name}**! 👋\n\n"
             "मैं आपकी कुंडली के आधार पर आपसे बातचीत कर सकता हूँ। "
             "Career, Job, Mahadasha, D10, Marriage, Finance, Foreign opportunity "
             "या किसी भी कुंडली संबंधी सवाल से शुरू करें।\n\n"
@@ -119,7 +177,7 @@ def _welcome_message(lang: str, user_name: str) -> str:
         )
 
     return (
-        f"Namaste {user_name}! 👋\n\n"
+        f"Namaste **{user_name}**! 👋\n\n"
         "I can discuss your Kundali interactively. "
         "Ask me about Career, Job, Mahadasha, D10, Marriage, Finance, "
         "Foreign opportunities, or anything else related to your chart.\n\n"
@@ -173,11 +231,11 @@ def _stream_answer(answer: str):
 
     for index, word in enumerate(words):
         yield word + (" " if index < len(words) - 1 else "")
-        time.sleep(0.012)
+        time.sleep(0.01)
 
 
 # ---------------------------------------------------------------------------
-# Multi-user management
+# User management
 # ---------------------------------------------------------------------------
 
 def _render_user_manager(store) -> tuple[str, str]:
@@ -196,9 +254,12 @@ def _render_user_manager(store) -> tuple[str, str]:
         configured = configured_user_id()
         current_user_id = configured if configured in labels else user_ids[0]
 
-    st.markdown("### 👤 User")
+    st.markdown(
+        '<div class="kundali-section-title">👤 <span>User</span></div>',
+        unsafe_allow_html=True,
+    )
 
-    user_col, add_col = st.columns((3, 1))
+    user_col, add_col = st.columns((4, 1.25), gap="small")
 
     selected_user_id = user_col.selectbox(
         "Select user",
@@ -286,12 +347,18 @@ def render_ai_chat(chart, details, lang: str) -> None:
                 st.session_state.chat_conversation_id = conversation_id
                 conversations = store.list_conversations(user_id)
 
-            st.markdown("### 💬 Conversations")
+            st.markdown(
+                '<div class="kundali-section-title">💬 <span>Conversations</span></div>',
+                unsafe_allow_html=True,
+            )
 
-            controls = st.columns((1, 4, 1))
+            new_col, convo_col, delete_col = st.columns(
+                (1.2, 5.2, 1.1),
+                gap="small",
+            )
 
-            if controls[0].button(
-                t("new_chat", lang),
+            if new_col.button(
+                "＋ New Chat",
                 use_container_width=True,
             ):
                 conversation_id = store.create_conversation(
@@ -323,8 +390,8 @@ def render_ai_chat(chart, details, lang: str) -> None:
 
             conversation_ids = list(labels)
 
-            selected = controls[1].selectbox(
-                t("conversations", lang),
+            selected = convo_col.selectbox(
+                "Conversations",
                 conversation_ids,
                 index=conversation_ids.index(active),
                 format_func=lambda item: labels[item],
@@ -335,7 +402,7 @@ def render_ai_chat(chart, details, lang: str) -> None:
             thread_id = selected
             st.session_state.chat_conversation_id = selected
 
-            if controls[2].button(
+            if delete_col.button(
                 "🗑️",
                 key="delete_current_chat",
                 help="Delete current conversation",
@@ -370,10 +437,10 @@ def render_ai_chat(chart, details, lang: str) -> None:
     # --------------------------------------------------------------
     # Clear chat
     # --------------------------------------------------------------
-    clear_col, _ = st.columns((1, 5))
+    clear_col, _ = st.columns((1.2, 6), gap="small")
 
     if clear_col.button(
-        t("clear_chat", lang),
+        "↻ Clear Chat",
         use_container_width=True,
     ):
         if store and thread_id:
@@ -402,7 +469,7 @@ def render_ai_chat(chart, details, lang: str) -> None:
     )
 
     # --------------------------------------------------------------
-    # Custom typing input
+    # Question box + send button on SAME ROW
     # --------------------------------------------------------------
     input_placeholder = (
         "अपना सवाल लिखें..."
@@ -412,29 +479,18 @@ def render_ai_chat(chart, details, lang: str) -> None:
 
     input_key = f"kundali_chat_keyup_{st.session_state.chat_input_version}"
 
-    draft = st_keyup(
-        input_placeholder,
-        value=st.session_state.chat_draft,
-        debounce=250,
-        key=input_key,
-        label_visibility="collapsed",
-    )
+    input_col, send_col = st.columns((8.5, 1), gap="small")
 
-    st.session_state.chat_draft = draft or ""
+    with input_col:
+        draft = st_keyup(
+            input_placeholder,
+            value=st.session_state.chat_draft,
+            debounce=250,
+            key=input_key,
+            label_visibility="collapsed",
+        )
 
-    action_col, send_col = st.columns((8, 1))
-
-    with action_col:
-        if st.session_state.chat_draft.strip():
-            typing_text = (
-                "✍️ आप लिख रहे हैं..."
-                if lang == "hi"
-                else "✍️ You are typing..."
-            )
-            st.markdown(
-                f'<div class="kundali-user-typing">{typing_text}</div>',
-                unsafe_allow_html=True,
-            )
+        st.session_state.chat_draft = draft or ""
 
     with send_col:
         send_clicked = st.button(
@@ -442,6 +498,18 @@ def render_ai_chat(chart, details, lang: str) -> None:
             key=f"send_chat_message_{st.session_state.chat_input_version}",
             help="Send message",
             use_container_width=True,
+        )
+
+    if st.session_state.chat_draft.strip():
+        typing_text = (
+            "✍️ आप लिख रहे हैं..."
+            if lang == "hi"
+            else "✍️ You are typing..."
+        )
+
+        st.markdown(
+            f'<div class="kundali-user-typing">{typing_text}</div>',
+            unsafe_allow_html=True,
         )
 
     question = None
@@ -461,7 +529,7 @@ def render_ai_chat(chart, details, lang: str) -> None:
     previous_history = list(st.session_state.chat_messages)
 
     # --------------------------------------------------------------
-    # Persist and show user message
+    # User message
     # --------------------------------------------------------------
     st.session_state.chat_messages.append(
         {"role": "user", "content": question}
@@ -482,7 +550,6 @@ def render_ai_chat(chart, details, lang: str) -> None:
     with st.chat_message("user"):
         st.markdown(question)
 
-    # Clear the draft for the next rerun/input instance.
     st.session_state.chat_draft = ""
     st.session_state.chat_input_version += 1
 
@@ -524,7 +591,7 @@ def render_ai_chat(chart, details, lang: str) -> None:
         return
 
     # --------------------------------------------------------------
-    # Persist AI response
+    # Persist assistant
     # --------------------------------------------------------------
     st.session_state.chat_messages.append(
         {"role": "assistant", "content": answer}

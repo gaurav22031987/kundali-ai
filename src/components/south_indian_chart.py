@@ -6,6 +6,7 @@ import streamlit.components.v1 as components
 
 from src.localization.translations import planet_name, sign_name, t
 from src.models import KundaliChart
+from src.components.divisional_chart import PLANET_ABBREVIATIONS
 
 SIGN_CELLS = {0: (1, 1), 1: (1, 2), 2: (1, 3), 3: (1, 4), 4: (2, 4), 5: (3, 4), 6: (4, 4), 7: (4, 3), 8: (4, 2), 9: (4, 1), 10: (3, 1), 11: (2, 1)}
 SIGNS = ("Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces")
@@ -15,7 +16,8 @@ def render_south_indian_chart(chart: KundaliChart, lang: str = "en") -> None:
     """Render signs and planet placements without recalculating their positions."""
     planets_by_sign: dict[str, list[str]] = {}
     for planet in chart.planets:
-        planets_by_sign.setdefault(planet.sign, []).append(planet_name(planet.name, lang))
+        label = PLANET_ABBREVIATIONS[planet.name] if lang == "en" else planet_name(planet.name, lang)
+        planets_by_sign.setdefault(planet.sign, []).append(f"{label} {planet.degree_dms}")
     cells = []
     for index, (row, column) in SIGN_CELLS.items():
         sign = SIGNS[index]

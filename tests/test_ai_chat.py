@@ -35,7 +35,7 @@ def test_fallback_openai_messages_include_history_and_language():
         "Follow up",
         "hi",
     )
-    assert "Hindi" in messages[1]["content"]
+    assert any("Hindi" in message["content"] for message in messages if message["role"] == "system")
     assert {"role": "assistant", "content": "Saved response"} in messages
 
 
@@ -52,5 +52,5 @@ def test_question_language_detection_prioritizes_devanagari_and_hinglish():
 
 def test_system_prompt_requires_one_relevant_follow_up_and_prior_history():
     assert "ask exactly ONE short follow-up" in SYSTEM_PROMPT
-    assert "Never repeat a clarification" in SYSTEM_PROMPT
-    assert "answer the original question" in SYSTEM_PROMPT
+    assert "Do not repeat a clarification" in SYSTEM_PROMPT
+    assert "answer the ORIGINAL user intent" in SYSTEM_PROMPT
