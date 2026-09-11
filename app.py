@@ -25,26 +25,52 @@ from src.services.kundali_service import generate_kundali
 LOGGER = logging.getLogger(__name__)
 ASTROJIVAN_BANNER = Path(__file__).resolve().parent / "assets" / "astrojivan_banner.png"
 def inject_styles() -> None:
-    st.markdown("""<style>
-    .stApp { background: #f7f8fc; }
-    [data-testid="stAppViewContainer"] > .main { max-width: 1300px; margin: 0 auto; }
-    .block-container { padding-top: 1.3rem; padding-bottom: 2.5rem; }
-    [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid #e9eaf2; }
-    [data-testid="stSidebar"] .block-container { padding-top: 1rem; }
-    .astrojivan-header { min-height:126px; display:flex; align-items:stretch; overflow:hidden; background:linear-gradient(135deg,#2f1648,#643d7d); color:#fff; border-radius:18px; box-shadow:0 10px 26px rgba(54,25,79,.16); margin-bottom:22px; }
-    .astrojivan-header-image { width:156px; flex:0 0 156px; border-right:2px solid rgba(216,169,51,.72); background:#241137; }
-    .astrojivan-header-image img { width:100%; height:100%; display:block; object-fit:cover; object-position:center; }
-    .astrojivan-header-copy { display:flex; flex-direction:column; justify-content:center; padding:20px 28px; min-width:0; }
-    .astrojivan-header-copy h1 { margin:0; color:#f4cf71; font-size:2rem; line-height:1.1; letter-spacing:.01em; }.astrojivan-header-copy p { margin:8px 0 0; color:rgba(255,255,255,.9); font-size:1rem; }
-    .summary-card { background:#fff; border:1px solid #ececf3; border-radius:16px; padding:18px; box-shadow:0 4px 14px rgba(31,35,51,.06); height:100%; box-sizing:border-box; }
-    .summary-card .label { color:#6b7280; font-size:.78rem; margin-bottom:5px; }.summary-card .value { color:#1f2937; font-weight:700; font-size:1rem; overflow-wrap:anywhere; }
-    div[data-testid="stTabs"] [role="tablist"] { overflow-x:auto; flex-wrap:nowrap; scrollbar-width:thin; } div[data-testid="stTabs"] button { font-weight:600; white-space:nowrap; } div[data-testid="stTabs"] button[aria-selected="true"] { color:#8a5900; border-color:#d6a11c; }.stButton > button { border-radius:10px; font-weight:700; min-height:44px; }
-    [data-testid="stSidebar"] .stButton > button { background:#5d337a; color:#fff; border:0; }
-    [data-testid="stSidebar"] .stButton > button:hover { background:#44245c; color:#fff; }
-    [data-testid="stDataFrame"] { border:1px solid #e7e8ef; border-radius:12px; overflow:hidden; }
-    @media (max-width:900px) { .block-container { padding-left:1rem; padding-right:1rem; }.astrojivan-header-copy h1 { font-size:1.7rem; } }
-    @media (max-width:600px) { .block-container { padding-top:.75rem; padding-left:.7rem; padding-right:.7rem; }.astrojivan-header { min-height:0; flex-direction:column; border-radius:14px; }.astrojivan-header-image { width:100%; height:105px; flex-basis:105px; border-right:0; border-bottom:2px solid rgba(216,169,51,.72); }.astrojivan-header-copy { padding:16px 18px; text-align:center; }.astrojivan-header-copy h1 { font-size:1.5rem; }.astrojivan-header-copy p { font-size:.9rem; }.summary-card { padding:13px; margin-bottom:8px; } }
-    </style>""", unsafe_allow_html=True)
+    st.markdown(
+    """
+    <style>
+    /* Hide Streamlit chrome */
+    header[data-testid="stHeader"] {
+        display: none;
+    }
+
+    #MainMenu {
+        visibility: hidden;
+    }
+
+    footer {
+        visibility: hidden;
+    }
+
+    div[data-testid="stStatusWidget"] {
+        display: none;
+    }
+
+    /* Better app spacing */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 2rem;
+        max-width: 1500px;
+    }
+
+    /* Premium typography */
+    html, body, [class*="css"] {
+        font-family: Inter, "Segoe UI", system-ui, sans-serif;
+    }
+
+    /* Buttons */
+    .stButton > button {
+        border-radius: 10px;
+        font-weight: 600;
+    }
+
+    /* Input controls */
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="select"] > div {
+        border-radius: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True)
 
 
 def render_header(lang: str) -> None:
@@ -206,7 +232,12 @@ def render_kundali_tabs(chart, details, lang: str) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="Kundali AI", page_icon="K", layout="wide", initial_sidebar_state="expanded")
+    st.set_page_config(
+    page_title="AstroJivan",
+    page_icon="✨",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    )
     inject_styles()
     submitted, details, lang = render_sidebar()
     render_header(lang)
